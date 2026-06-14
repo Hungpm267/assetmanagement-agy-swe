@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản lý Tài sản Cá nhân</title>
+  <!-- Google Fonts: Inter font for clean technical dashboard aesthetics -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="light-mode">
+  <!-- Dynamic Purple Particle Canvas Background -->
+  <canvas id="bgCanvas"></canvas>
+  <!-- Auth Screen Container -->
+  <div id="authContainer" class="auth-container hidden">
+    <div class="auth-card">
+      <h2 class="auth-title">📦 Hộp Đồ Cá Nhân</h2>
+      <p class="auth-subtitle">Đăng nhập để quản lý tủ đồ lặt vặt của bạn</p>
+      
+      <div class="auth-tabs">
+        <button id="tabSignIn" class="auth-tab active">Đăng nhập</button>
+        <button id="tabSignUp" class="auth-tab">Đăng ký mới</button>
+      </div>
+
+      <form id="authForm" class="auth-form">
+        <div class="form-group">
+          <label for="authEmail">Email</label>
+          <input type="email" id="authEmail" required placeholder="nhap@emailcuaban.com" class="form-control">
+        </div>
+        <div class="form-group">
+          <label for="authPassword">Mật khẩu</label>
+          <input type="password" id="authPassword" required minlength="6" placeholder="Tối thiểu 6 ký tự..." class="form-control">
+        </div>
+        <div id="authErrorMsg" class="auth-error hidden"></div>
+        <div id="authSuccessMsg" class="auth-success hidden"></div>
+        <button type="submit" id="authSubmitBtn" class="btn btn-primary btn-block">Đăng Nhập</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Dashboard Container -->
+  <div id="appContainer" class="app-container hidden">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-title-group">
+        <h1>📦 Hộp Đồ Cá Nhân</h1>
+        <p>Quản lý vật dụng lặt vặt và tài sản cá nhân</p>
+      </div>
+      <div class="header-actions">
+        <span id="userEmailText" class="user-email"></span>
+        <button id="openProfileModalBtn" class="action-icon-btn" title="Chỉnh sửa hồ sơ & thiết lập">⚙️ Thiết lập</button>
+        <button id="signOutBtn" class="action-icon-btn" title="Đăng xuất khỏi tài khoản">🚪 Đăng xuất</button>
+        <button id="themeToggleBtn" class="action-icon-btn" title="Chuyển chế độ Sáng/Tối">🌓 Toggle Theme</button>
+      </div>
+    </header>
+
+    <!-- Stats Section -->
+    <section class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">Tổng số vật phẩm</span>
+        <span id="statTotalItems" class="stat-value">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Số nhóm danh mục</span>
+        <span id="statTotalCategories" class="stat-value">0</span>
+      </div>
+      <div class="stat-card status-borrowed-card">
+        <span class="stat-label">Đang cho mượn</span>
+        <span id="statBorrowed" class="stat-value">0</span>
+      </div>
+      <div class="stat-card status-lost-card">
+        <span class="stat-label">Đã thất lạc</span>
+        <span id="statLost" class="stat-value">0</span>
+      </div>
+    </section>
+
+    <!-- Control Bar -->
+    <section class="control-bar">
+      <div class="search-filter-group">
+        <input type="text" id="searchInput" placeholder="Tìm tên đồ vật hoặc vị trí..." class="form-control">
+        
+        <select id="categoryFilter" class="form-control">
+          <option value="all">Tất cả danh mục</option>
+          <!-- Categories populated dynamically -->
+        </select>
+        
+        <select id="statusFilter" class="form-control">
+          <option value="all">Tất cả trạng thái</option>
+          <option value="Bình thường">Bình thường</option>
+          <option value="Đang mượn">Đang mượn</option>
+          <option value="Thất lạc">Thất lạc</option>
+        </select>
+      </div>
+      <button id="openAddModalBtn" class="btn btn-primary">+ Thêm Đồ Vật</button>
+    </section>
+
+    <!-- Assets List Container -->
+    <main class="assets-main">
+      <div id="assetsLoading" class="loading-spinner">Đang tải dữ liệu từ Supabase...</div>
+      <div id="assetsEmpty" class="empty-state hidden">
+        <p>Không tìm thấy món đồ nào. Hãy thêm món đồ đầu tiên của bạn!</p>
+      </div>
+      <div id="assetsGrid" class="assets-grid">
+        <!-- Asset cards rendered dynamically -->
+      </div>
+    </main>
+
+    <!-- Footer / Connection Status -->
+    <footer class="app-footer">
+      <div class="connection-status">
+        <span id="statusIndicator" class="status-dot"></span>
+        <span id="statusText">Đang kết nối cơ sở dữ liệu...</span>
+      </div>
+      <div class="footer-info">Tối giản & Tốc độ</div>
+    </footer>
+  </div>
+
+  <!-- Add/Edit Asset Modal -->
+  <div id="assetModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Thêm món đồ mới</h3>
+        <button id="closeModalBtn" class="modal-close-btn">&times;</button>
+      </div>
+      <form id="assetForm" class="modal-form">
+        <input type="hidden" id="assetIdInput">
+        
+        <div class="form-group">
+          <label for="nameInput">Tên món đồ <span class="required">*</span></label>
+          <input type="text" id="nameInput" placeholder="Ví dụ: Chìa khóa xe máy" required class="form-control">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="categoryInput">Danh mục <span class="required">*</span></label>
+            <input type="text" id="categoryInput" list="categoryDatalist" placeholder="Chọn hoặc tự nhập danh mục mới..." required class="form-control" autocomplete="off">
+            <datalist id="categoryDatalist"></datalist>
+          </div>
+          <div class="form-group">
+            <label for="locationInput">Vị trí cất giữ <span class="required">*</span></label>
+            <input type="text" id="locationInput" placeholder="Ví dụ: Ngăn kéo tủ bàn học" required class="form-control">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="quantityInput">Số lượng</label>
+            <input type="number" id="quantityInput" min="1" value="1" required class="form-control">
+          </div>
+          <div class="form-group">
+            <label for="statusInput">Trạng thái</label>
+            <select id="statusInput" class="form-control">
+              <option value="Bình thường">Bình thường</option>
+              <option value="Đang mượn">Đang mượn</option>
+              <option value="Thất lạc">Thất lạc</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="notesInput">Ghi chú thêm</label>
+          <textarea id="notesInput" rows="3" placeholder="Thông tin mô tả thêm chi tiết nếu cần..." class="form-control"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Hình ảnh đồ vật</label>
+          <div class="image-input-container">
+            <div class="image-input-tabs">
+              <button type="button" id="imgTabFile" class="img-tab active">Tải ảnh lên</button>
+              <button type="button" id="imgTabUrl" class="img-tab">Đường dẫn URL</button>
+            </div>
+            
+            <div id="imgFileGroup" class="image-input-group">
+              <label for="imageFileInput" class="file-upload-label">
+                <span class="upload-icon">📷</span> Chọn ảnh từ thiết bị
+              </label>
+              <input type="file" id="imageFileInput" accept="image/*" class="file-input-hidden">
+            </div>
+            
+            <div id="imgUrlGroup" class="image-input-group hidden">
+              <input type="url" id="imageUrlInput" placeholder="Ví dụ: https://example.com/image.jpg" class="form-control">
+            </div>
+            
+            <div id="imagePreviewContainer" class="image-preview-container hidden">
+              <img id="imagePreview" src="" alt="Xem trước ảnh">
+              <button type="button" id="removeImageBtn" class="btn-remove-image" title="Xóa ảnh">&times;</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="cancelModalBtn" class="btn btn-secondary">Hủy</button>
+          <button type="submit" id="saveAssetBtn" class="btn btn-primary">Lưu Lại</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Profile & Settings Modal -->
+  <div id="profileModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>👤 Hồ sơ & Thiết lập</h3>
+        <button id="closeProfileModalBtn" class="modal-close-btn">&times;</button>
+      </div>
+      <form id="profileForm" class="modal-form">
+        <div class="form-group">
+          <label for="profileDisplayNameInput">Tên hiển thị (Biệt danh)</label>
+          <input type="text" id="profileDisplayNameInput" placeholder="Ví dụ: Minh Hùng" class="form-control">
+        </div>
+
+        <!-- Custom Categories Section -->
+        <div class="form-group">
+          <label>Danh mục tự định nghĩa</label>
+          <div class="custom-list-manager">
+            <div class="list-input-row">
+              <input type="text" id="newCategoryInput" placeholder="Thêm danh mục mới..." class="form-control">
+              <button type="button" id="addCategoryBtn" class="btn btn-secondary">+</button>
+            </div>
+            <div id="customCategoriesList" class="custom-tags-container">
+              <!-- Custom categories tags rendered dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Statuses Section -->
+        <div class="form-group">
+          <label>Trạng thái tự định nghĩa</label>
+          <div class="custom-list-manager">
+            <div class="list-input-row">
+              <input type="text" id="newStatusInput" placeholder="Thêm trạng thái mới..." class="form-control">
+              <button type="button" id="addStatusBtn" class="btn btn-secondary">+</button>
+            </div>
+            <div id="customStatusesList" class="custom-tags-container">
+              <!-- Custom statuses tags rendered dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="cancelProfileBtn" class="btn btn-secondary">Hủy</button>
+          <button type="submit" id="saveProfileBtn" class="btn btn-primary">Lưu Thay Đổi</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
